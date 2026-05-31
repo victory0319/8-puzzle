@@ -28,7 +28,7 @@ st.markdown("""
         margin: 1px; border: 1px solid #6dd6a0;
     }
 </style>
-""", unsafe_allow_allowed=True)
+""", unsafe_allow_html=True)
 
 GOAL = [1, 2, 3, 4, 5, 6, 7, 8, 0]
 
