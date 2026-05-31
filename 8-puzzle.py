@@ -6,7 +6,7 @@ import heapq
 # --- 1. 페이지 기본 설정 및 스타일 ---
 st.set_page_config(page_title="8-퍼즐 탐색 비교기", layout="wide")
 
-# 보내주신 깔끔한 UI 스타일에 맞춰 디자인 커스텀 CSS 적용
+# UI 커스텀 디자인 및 CSS 주입
 st.markdown("""
 <style>
     .tile {
@@ -33,21 +33,17 @@ st.markdown("""
 GOAL = [1, 2, 3, 4, 5, 6, 7, 8, 0]
 
 # --- 2. 세션 상태(Session State) 초기화 ---
-# Streamlit은 상호작용 시 코드가 처음부터 재실행되므로 상태 저장이 필수적입니다.
 if 'current_state' not in st.session_state:
     st.session_state.current_state = [1, 2, 3, 4, 0, 5, 7, 8, 6]
-if 'solution_path' not in st.session_state:
-    st.session_state.solution_path = []
 if 'stats' not in st.session_state:
     st.session_state.stats = {"nodes": "—", "moves": "—", "time": "—", "status": "알고리즘을 선택하고 탐색을 시작하세요."}
 
-# --- 3. 8-퍼즐 핵심 로직 및 알고리즘 함수 정의 ---
+# --- 3. 8-퍼즐 탐색 알고리즘 및 유틸리티 함수 ---
 def get_neighbors(state):
     idx = state.index(0)
     row, col = idx // 3, idx % 3
     neighbors = []
-    moves = [(-1, 0), (1, 0), (0, -1), (0, 1)] # 상, 하, 좌, 우
-    
+    moves = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     for dr, dc in moves:
         nr, nc = row + dr, col + dc
         if 0 <= nr < 3 and 0 <= nc < 3:
@@ -75,7 +71,7 @@ def manhattan(state):
         d += abs(i // 3 - g // 3) + abs(i % 3 - g % 3)
     return d
 
-# --- 알고리즘 4종 세트 ---
+# 알고리즘 함수 내부 튜닝 (기존 로직 유지)
 def algo_dfs(start):
     stack = [(start, [start])]
     visited = set()
@@ -85,7 +81,7 @@ def algo_dfs(start):
         nodes += 1
         if s == GOAL:
             return path, nodes, False
-        if len(path) > 30: # 깊이 제한 30
+        if len(path) > 30:
             continue
         k = tuple(s)
         if k in visited:
@@ -123,21 +119,17 @@ def algo_hc(start):
         if s == GOAL:
             return path, nodes, False
         neighbors = get_neighbors(s)
-        # 자식 노드 중 맨해튼 거리가 가장 낮은 것 선택
         best = min(neighbors, key=manhattan)
         if manhattan(best) >= manhattan(s) or tuple(best) in visited:
-            return path, nodes, True # Local Optimum 봉착 시 실패 반환
+            return path, nodes, True
         visited.add(tuple(best))
         path.append(best)
         s = best
 
 def algo_bf(start):
-    # 파이썬의 heapq는 튜플의 첫 요소(우선순위)를 기준으로 정렬함
-    # 동점 상태 처리를 위해 카운터(nodes) 활용
     nodes = 0
     heap = [(manhattan(start), nodes, start, [start])]
     visited = set()
-    
     while heap:
         _, _, s, path = heapq.heappop(heap)
         nodes += 1
@@ -152,37 +144,38 @@ def algo_bf(start):
                 heapq.heappush(heap, (manhattan(nb), nodes, nb, path + [nb]))
     return None, nodes, True
 
-# --- 4. 퍼즐판 그리기를 위한 헬퍼 함수 ---
+# --- 4. 퍼즐판 그리기를 위한 컴포넌트 함수 ---
 def draw_puzzle(state, is_solved=False, is_failed=False):
     cols = st.columns(3)
     for i in range(9):
         val = state[i]
-        tile_style = "tile"
+        tile_class = "tile"
         if val == 0:
-            tile_style += " tile-empty"
+            tile_class += " tile-empty"
         elif is_solved:
-            tile_style += " tile-solved"
+            tile_class += " tile-solved"
         elif is_failed:
-            tile_style += " tile-failed"
+            tile_class += " tile-failed"
             
         with cols[i % 3]:
-            st.markdown(f'<div class="tile">{val if val != 0 else ""}</div>', unsafe_allow_box_allowed=True)
+            # 코드 하단부 unsafe_allow_box_allowed 매개변수 에러 방지를 위해 제거 후 기본 렌더링
+            st.markdown(f'<div class="tile">{val if val != 0 else ""}</div>', unsafe_allow_html=True)
 
-# --- 5. 화면 레이아웃 구성 ---
+# --- 5. 레이아웃 배치 ---
 st.title("8-퍼즐 탐색 비교기 (Streamlit 버전)")
 st.caption("DFS · BFS · 언덕 등반 · 최고 우선")
 
 layout_left, layout_right = st.columns([1, 1.2])
 
-# --- 왼쪽 영역: 퍼즐 및 상태 제어 ---
+# --- 왼쪽: 시각화 및 퍼즐판 제어 ---
 with layout_left:
     st.subheader("현재 상태")
     
-    # 애니메이션이 실시간으로 덮어씌워질 가상 공간(empty) 선언
+    # 실시간 렌더링을 위해 비워두는 메인 공간들
     puzzle_placeholder = st.empty()
     status_placeholder = st.empty()
     
-    # 초기 렌더링
+    # 맨 처음 로드되었을 때의 퍼즐 상태 시각화
     with puzzle_placeholder.container():
         draw_puzzle(st.session_state.current_state, is_solved=(st.session_state.current_state == GOAL))
     status_placeholder.write(st.session_state.stats["status"])
@@ -197,21 +190,18 @@ with layout_left:
             random.shuffle(arr)
             if is_solvable(arr) and arr != GOAL:
                 st.session_state.current_state = arr
-                st.session_state.solution_path = []
                 st.session_state.stats = {"nodes": "—", "moves": "—", "time": "—", "status": "새 퍼즐이 설정되었습니다."}
                 st.rerun()
                 
     if c2.button("↩️ 초기화", use_container_width=True):
         st.session_state.current_state = [1, 2, 3, 4, 0, 5, 7, 8, 6]
-        st.session_state.solution_path = []
         st.session_state.stats = {"nodes": "—", "moves": "—", "time": "—", "status": "초기 상태로 리셋되었습니다."}
         st.rerun()
 
-    # 재생 속도 슬라이더
     speed_ms = st.slider("⏱️ 재생 단계별 대기 속도 (ms)", min_value=100, max_value=800, value=400, step=50)
     speed_sec = speed_ms / 1000.0
 
-# --- 오른쪽 영역: 알고리즘 및 결과 분석 ---
+# --- 오른쪽: 알고리즘 설정 및 결과 통계 판 ---
 with layout_right:
     st.subheader("알고리즘 선택")
     algo_choice = st.radio(
@@ -220,7 +210,6 @@ with layout_right:
         label_visibility="collapsed"
     )
     
-    # 안내 문구 맵핑
     desc_box = st.info("")
     algo_key = ""
     if "DFS" in algo_choice:
@@ -236,73 +225,86 @@ with layout_right:
         desc_box.info("맨해튼 거리가 낮은 상태를 우선 탐색합니다. 대부분 빠르게 해를 찾지만 최적해를 보장하지 않습니다.")
         algo_key = "bf"
 
-    # 탐색 실행 버튼
+    # 통계 테이블 데이터를 미리 보여주기 위한 가상 컨테이너들 생성
+    metric_placeholder = st.empty()
+    
+    # 탐색 실행 및 실시간 애니메이션 루프
     if st.button("▶ 탐색 및 애니메이션 시각화 시작", type="primary", use_container_width=True):
-        start_time = time.time()
-        
-        # 알고리즘 맵핑 연산
-        algo_func = {"dfs": algo_dfs, "bfs": algo_bfs, "hc": algo_hc, "bf": algo_bf}[algo_key]
-        path, nodes_count, is_failed = algo_func(st.session_state.current_state)
-        
-        execution_time = (time.time() - start_time) * 1000  # ms 변환
-        
-        if path is None or (algo_key == "hc" and is_failed and len(path) <= 1):
-            st.session_state.stats = {
-                "nodes": f"{nodes_count:,}",
-                "moves": "실패",
-                "time": f"{execution_time:.1f} ms",
-                "status": "✗ 해를 찾지 못했습니다 (Local Optimum 상태)."
-            }
-            with puzzle_placeholder.container():
-                draw_puzzle(st.session_state.current_state, is_failed=True)
-            status_placeholder.error(st.session_state.stats["status"])
+        if not is_solvable(st.session_state.current_state):
+            st.error("불가능한 퍼즐 배열입니다. 다시 섞어주세요.")
         else:
-            st.session_state.solution_path = path
-            moves_count = len(path) - 1
+            start_time = time.time()
+            algo_func = {"dfs": algo_dfs, "bfs": algo_bfs, "hc": algo_hc, "bf": algo_bf}[algo_key]
+            path, nodes_count, is_failed = algo_func(st.session_state.current_state)
+            execution_time = (time.time() - start_time) * 1000  # ms
             
-            # 실시간 탐색 애니메이션 플레이어 구동 루프
-            for step_idx, state in enumerate(path):
-                is_last = (step_idx == len(path) - 1)
-                
-                # 메인 화면 퍼즐 실시간 리렌더링
+            # 해 탐색 자체를 완전히 패배한 경우 (예: 깊이 제한 초과 등)
+            if path is None or (algo_key == "hc" and is_failed and len(path) <= 1):
+                st.session_state.stats = {
+                    "nodes": f"{nodes_count:,}", "moves": "실패", "time": f"{execution_time:.1f} ms",
+                    "status": "✗ 해를 찾지 못했습니다 (Local Optimum 상태)."
+                }
                 with puzzle_placeholder.container():
-                    draw_puzzle(state, is_solved=(state == GOAL), is_failed=(is_failed and is_last))
+                    draw_puzzle(st.session_state.current_state, is_failed=True)
+                status_placeholder.error(st.session_state.stats["status"])
+            else:
+                moves_count = len(path) - 1
                 
-                # 상태 메시지 업데이트
-                if state == GOAL:
-                    status_text = f"✓ 완료! {moves_count}번 이동 완료"
-                    status_placeholder.success(status_text)
-                elif is_failed and is_last:
-                    status_text = f"✗ 국소 최적해(Local Optimum)에 갇힘 — 최종 맨해튼 거리: {manhattan(state)}"
-                    status_placeholder.error(status_text)
-                else:
-                    status_text = f"탐색 애니메이션 재생 중... (Step {step_idx}/{moves_count})"
-                    status_placeholder.warning(status_text)
+                # ⭐ 핵심 수정: st.rerun() 없이 컴포넌트 내부에서 애니메이션 순회 제어
+                for step_idx, state in enumerate(path):
+                    is_last = (step_idx == len(path) - 1)
+                    
+                    # 1. 메인 퍼즐판 그래픽 변경
+                    with puzzle_placeholder.container():
+                        draw_puzzle(state, is_solved=(state == GOAL), is_failed=(is_failed and is_last))
+                    
+                    # 2. 메시지 알림창 처리
+                    if state == GOAL:
+                        status_text = f"✓ 완료! {moves_count}번 이동 완료"
+                        status_placeholder.success(status_text)
+                    elif is_failed and is_last:
+                        status_text = f"✗ 국소 최적해(Local Optimum)에 갇힘 — 최종 맨해튼 거리: {manhattan(state)}"
+                        status_placeholder.error(status_text)
+                    else:
+                        status_text = f"탐색 애니메이션 재생 중... (Step {step_idx}/{moves_count})"
+                        status_placeholder.warning(status_text)
+                    
+                    # 3. 실시간 결과 분석 스코어 보드 반영
+                    with metric_placeholder.container():
+                        st.divider()
+                        st.subheader("결과 데이터 분석")
+                        stat_cols = st.columns(3)
+                        stat_cols[0].metric("탐색한 총 노드 수", f"{nodes_count:,}")
+                        stat_cols[1].metric("최종 이동 횟수", f"{moves_count}번 후 실패" if is_failed and is_last else f"{step_idx} / {moves_count}번")
+                        stat_cols[2].metric("알고리즘 연산 시간", f"{execution_time:.1f} ms")
+                    
+                    # 지정한 슬라이더 속도만큼 대기
+                    time.sleep(speed_sec)
                 
-                # 결과 지표 실시간 갱신 레이아웃
+                # 최종 고정 데이터 세션에 박제
                 st.session_state.stats = {
                     "nodes": f"{nodes_count:,}",
                     "moves": f"{moves_count}번 이동 후 실패" if is_failed else f"{moves_count}번",
                     "time": f"{execution_time:.1f} ms",
                     "status": status_text
                 }
-                
-                time.sleep(speed_sec) # 사용자가 조절한 딜레이 적용
-            st.rerun()
+                # 마지막에 상태 유지를 위해 한 판 강제 리렌더링
+                st.session_state.current_state = path[-1]
 
-    st.divider()
-    st.subheader("결과 데이터 분석")
-    stat_cols = st.columns(3)
-    stat_cols[0].metric("탐색한 총 노드 수", st.session_state.stats["nodes"])
-    stat_cols[1].metric("최종 이동 횟수", st.session_state.stats["moves"])
-    stat_cols[2].metric("알고리즘 연산 시간", st.session_state.stats["time"])
+    # 기본(또는 탐색 완료 후) 메트릭 판 표시 구조
+    with metric_placeholder.container():
+        st.divider()
+        st.subheader("결과 데이터 분석")
+        stat_cols = st.columns(3)
+        stat_cols[0].metric("탐색한 총 노드 수", st.session_state.stats["nodes"])
+        stat_cols[1].metric("최종 이동 횟수", st.session_state.stats["moves"])
+        stat_cols[2].metric("알고리즘 연산 시간", st.session_state.stats["time"])
 
     st.divider()
     st.subheader("목표 상태")
-    # 미니 맵 목표 가시화
     for row in range(3):
         row_str = ""
         for col in range(3):
             val = GOAL[row*3 + col]
             row_str += f'<span class="goal-tile">{val if val!=0 else "_"}</span>'
-        st.markdown(row_str, unsafe_allow_box_allowed=True)
+        st.markdown(row_str, unsafe_allow_html=True)
